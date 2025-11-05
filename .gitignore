@@ -1,0 +1,57 @@
+# Environment and credentials
+.env
+*.env
+!config.template.env
+
+# API keys and secrets
+secrets/
+credentials/
+*.key
+*.pem
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Backups
+backups/
+*.backup
+*.bak
+
+# Output data
+data/
+output/
+exports/
+*.csv
+*.xlsx
+
+# N8N specific
+.n8n/
+*.db
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node modules (if adding Node.js scripts)
+node_modules/
+package-lock.json
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Sensitive data
+*_private*
+*_secret*
+*_confidential*

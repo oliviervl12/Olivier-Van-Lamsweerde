@@ -1,0 +1,520 @@
+{
+  "name": "Huisartsen Scraper - Netherlands GP Practices",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "searchQuery",
+              "value": "huisartsenpraktijk"
+            },
+            {
+              "name": "country",
+              "value": "Netherlands"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "name": "Set Initial Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "content": "## Dutch GP Practices Scraper\n\nThis workflow scrapes information about Dutch general practitioner practices (huisartsenpraktijken).\n\n**Data Sources:**\n1. Zorgkaartnederland.nl\n2. Google Maps/Places API\n3. Practice websites\n\n**Extracted Information:**\n- Email addresses\n- Phone numbers\n- City/Location\n- Doctor names and contact details\n- Full addresses\n\n**Output:**\nGoogle Sheets with separate tabs for:\n- Main Practice Info\n- Doctor Details\n- Contact Information",
+        "height": 464.5716694772344,
+        "width": 389.0877914428506
+      },
+      "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "name": "Workflow Documentation",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, 440]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://maps.googleapis.com/maps/api/place/textsearch/json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleMapsApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.searchQuery }} {{ $json.country }}"
+            },
+            {
+              "name": "type",
+              "value": "doctor"
+            },
+            {
+              "name": "key",
+              "value": "={{ $credentials.apiKey }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-b8c9-0123-def0-234567890123",
+      "name": "Search Google Places",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 300],
+      "notesInFlow": true,
+      "notes": "Search for GP practices using Google Places API"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "place_id",
+              "name": "place_id",
+              "value": "={{ $json.place_id }}",
+              "type": "string"
+            },
+            {
+              "id": "name",
+              "name": "practice_name",
+              "value": "={{ $json.name }}",
+              "type": "string"
+            },
+            {
+              "id": "address",
+              "name": "address",
+              "value": "={{ $json.formatted_address }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e5f6a7b8-c9d0-1234-ef01-345678901234",
+      "name": "Extract Basic Info",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://maps.googleapis.com/maps/api/place/details/json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleMapsApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "place_id",
+              "value": "={{ $json.place_id }}"
+            },
+            {
+              "name": "fields",
+              "value": "name,formatted_address,formatted_phone_number,website,opening_hours,geometry"
+            },
+            {
+              "name": "key",
+              "value": "={{ $credentials.apiKey }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f6a7b8c9-d0e1-2345-f012-456789012345",
+      "name": "Get Place Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1130, 300],
+      "notesInFlow": true,
+      "notes": "Get detailed information for each practice"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.result.website }}",
+        "options": {}
+      },
+      "id": "a7b8c9d0-e1f2-3456-0123-567890123456",
+      "name": "Scrape Practice Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1350, 300],
+      "notesInFlow": true,
+      "notes": "Scrape the practice website for additional details"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze the following HTML content from a Dutch GP practice (huisartsenpraktijk) website and extract:\n\n1. All doctor names working at this practice\n2. Email addresses (practice email and individual doctor emails if available)\n3. Phone numbers (main practice number and direct lines if available)\n4. Full address details (street, number, postal code, city)\n5. Specializations or additional information about each doctor\n\nHTML Content:\n{{ $json.data }}\n\nPractice Info from Google:\n- Name: {{ $('Get Place Details').item.json.result.name }}\n- Address: {{ $('Get Place Details').item.json.result.formatted_address }}\n- Phone: {{ $('Get Place Details').item.json.result.formatted_phone_number }}\n\nReturn the data in the following JSON structure:\n{\n  \"practice_info\": {\n    \"name\": \"practice name\",\n    \"address\": \"full address\",\n    \"postal_code\": \"postal code\",\n    \"city\": \"city name\",\n    \"phone\": \"phone number\",\n    \"email\": \"practice email\"\n  },\n  \"doctors\": [\n    {\n      \"name\": \"doctor name\",\n      \"email\": \"doctor email (if available)\",\n      \"phone\": \"direct phone (if available)\",\n      \"specialization\": \"specialization (if available)\"\n    }\n  ]\n}",
+        "options": {
+          "systemMessage": "You are an expert at extracting structured information from Dutch healthcare websites. Focus on accurate data extraction and maintain Dutch formatting conventions for addresses and phone numbers."
+        }
+      },
+      "id": "b8c9d0e1-f2a3-4567-1234-678901234567",
+      "name": "AI Extract Information",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [1570, 300],
+      "notesInFlow": true,
+      "notes": "Use AI to intelligently extract all required information"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse AI response and structure the data\nconst items = [];\n\nfor (const item of $input.all()) {\n  try {\n    // Parse AI response\n    let extractedData;\n    if (typeof item.json.response === 'string') {\n      // Try to find JSON in the response\n      const jsonMatch = item.json.response.match(/\\{[\\s\\S]*\\}/);\n      if (jsonMatch) {\n        extractedData = JSON.parse(jsonMatch[0]);\n      }\n    } else {\n      extractedData = item.json.response;\n    }\n\n    if (extractedData && extractedData.practice_info) {\n      // Create main practice record\n      const practiceRecord = {\n        practice_name: extractedData.practice_info.name,\n        address: extractedData.practice_info.address,\n        postal_code: extractedData.practice_info.postal_code,\n        city: extractedData.practice_info.city,\n        phone: extractedData.practice_info.phone,\n        email: extractedData.practice_info.email,\n        website: item.json.website || '',\n        doctors_count: extractedData.doctors ? extractedData.doctors.length : 0,\n        scraped_date: new Date().toISOString()\n      };\n      \n      items.push({ json: practiceRecord, pairedItem: { item: 0 } });\n\n      // Create doctor records\n      if (extractedData.doctors && Array.isArray(extractedData.doctors)) {\n        for (const doctor of extractedData.doctors) {\n          const doctorRecord = {\n            practice_name: extractedData.practice_info.name,\n            practice_city: extractedData.practice_info.city,\n            doctor_name: doctor.name,\n            doctor_email: doctor.email || '',\n            doctor_phone: doctor.phone || '',\n            specialization: doctor.specialization || '',\n            scraped_date: new Date().toISOString()\n          };\n          items.push({ json: doctorRecord, pairedItem: { item: 0 } });\n        }\n      }\n    }\n  } catch (error) {\n    console.error('Error parsing data:', error);\n    // Still push the item with error info\n    items.push({ \n      json: { \n        error: error.message,\n        raw_data: item.json \n      }, \n      pairedItem: { item: 0 } \n    });\n  }\n}\n\nreturn items;"
+      },
+      "id": "c9d0e1f2-a3b4-5678-2345-789012345678",
+      "name": "Structure Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1790, 300],
+      "notesInFlow": true,
+      "notes": "Format data for Google Sheets output"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Practice Info",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "practice_name": "={{ $json.practice_name }}",
+            "address": "={{ $json.address }}",
+            "postal_code": "={{ $json.postal_code }}",
+            "city": "={{ $json.city }}",
+            "phone": "={{ $json.phone }}",
+            "email": "={{ $json.email }}",
+            "website": "={{ $json.website }}",
+            "doctors_count": "={{ $json.doctors_count }}",
+            "scraped_date": "={{ $json.scraped_date }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "d0e1f2a3-b4c5-6789-3456-890123456789",
+      "name": "Write to Practice Info Tab",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2010, 180],
+      "notesInFlow": true,
+      "notes": "Write practice information to first tab",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "1",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Doctor Details",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "practice_name": "={{ $json.practice_name }}",
+            "practice_city": "={{ $json.practice_city }}",
+            "doctor_name": "={{ $json.doctor_name }}",
+            "doctor_email": "={{ $json.doctor_email }}",
+            "doctor_phone": "={{ $json.doctor_phone }}",
+            "specialization": "={{ $json.specialization }}",
+            "scraped_date": "={{ $json.scraped_date }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "e1f2a3b4-c5d6-7890-4567-901234567890",
+      "name": "Write to Doctor Details Tab",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2010, 400],
+      "notesInFlow": true,
+      "notes": "Write doctor information to second tab",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "1",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "f2a3b4c5-d6e7-8901-5678-012345678901",
+      "name": "Schedule (Optional)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 520],
+      "disabled": true,
+      "notesInFlow": true,
+      "notes": "Enable this to run automatically every 6 hours"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.practice_name }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a3b4c5d6-e7f8-9012-6789-123456789012",
+      "name": "Filter Valid Practices",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1570, 520],
+      "notesInFlow": true,
+      "notes": "Only process practices with valid data"
+    },
+    {
+      "parameters": {
+        "content": "## Configuration Required:\n\n1. **Google Maps API Key**\n   - Enable Places API\n   - Add credentials in N8N\n\n2. **Google Sheets**\n   - Create spreadsheet with tabs:\n     * Practice Info\n     * Doctor Details\n     * Contact Information\n   - Connect Google Sheets OAuth2\n\n3. **AI/LLM Setup**\n   - Configure OpenAI or local LLM\n   - Adjust prompts as needed\n\n4. **Rate Limiting**\n   - Add delays between requests\n   - Respect robots.txt",
+        "height": 406.69516038908046,
+        "width": 346.67842544659756
+      },
+      "id": "b4c5d6e7-f8a9-0123-7890-234567890123",
+      "name": "Configuration Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1380, 480],
+      "color": 4
+    },
+    {
+      "parameters": {
+        "jsCode": "// Add delay between requests to respect rate limits\nconst delayMs = 2000; // 2 seconds\nawait new Promise(resolve => setTimeout(resolve, delayMs));\nreturn $input.all();"
+      },
+      "id": "c5d6e7f8-a9b0-1234-8901-345678901234",
+      "name": "Rate Limit Delay",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 520],
+      "notesInFlow": true,
+      "notes": "Prevent overwhelming servers with requests"
+    },
+    {
+      "parameters": {
+        "url": "https://www.zorgkaartnederland.nl/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "huisarts"
+            },
+            {
+              "name": "type",
+              "value": "practice"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d6e7f8a9-b0c1-2345-9012-456789012345",
+      "name": "Alternative: Zorgkaart Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 520],
+      "disabled": true,
+      "notesInFlow": true,
+      "notes": "Alternative data source - Zorgkaart Nederland"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Set Initial Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Initial Parameters": {
+      "main": [
+        [
+          {
+            "node": "Search Google Places",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Google Places": {
+      "main": [
+        [
+          {
+            "node": "Extract Basic Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Basic Info": {
+      "main": [
+        [
+          {
+            "node": "Get Place Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Place Details": {
+      "main": [
+        [
+          {
+            "node": "Scrape Practice Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Practice Website": {
+      "main": [
+        [
+          {
+            "node": "AI Extract Information",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Extract Information": {
+      "main": [
+        [
+          {
+            "node": "Structure Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structure Data": {
+      "main": [
+        [
+          {
+            "node": "Write to Practice Info Tab",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write to Doctor Details Tab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Valid Practices": {
+      "main": [
+        [
+          {
+            "node": "Structure Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Delay": {
+      "main": [
+        [
+          {
+            "node": "Get Place Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "meta": {
+    "instanceId": "your-n8n-instance-id"
+  },
+  "id": "huisartsen-scraper-v1",
+  "tags": [
+    {
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "id": "1",
+      "name": "healthcare"
+    },
+    {
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "id": "2",
+      "name": "scraping"
+    },
+    {
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "id": "3",
+      "name": "netherlands"
+    }
+  ]
+}
