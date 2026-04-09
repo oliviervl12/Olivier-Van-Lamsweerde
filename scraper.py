@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """
 Huisartsenpraktijken Lead Scraper
-Scrapt contactgegevens (naam dokter, telefoon, email) van huisartsenpraktijken
-via zorgkaartnederland.nl
+Scrapt contactgegevens van huisartsenpraktijken via zorgkaartnederland.nl
 
-Gebruik:
-  python scraper.py                                    # Scrapt landelijk, 5 pagina's
-  python scraper.py --steden amsterdam                 # Alleen Amsterdam
-  python scraper.py --steden amsterdam,rotterdam,utrecht --paginas 10
-  python scraper.py --uitvoer mijn_leads.csv --json mijn_leads.json
-  python scraper.py --verbose
+Gebruik (CLI):
+  python scraper.py
+  python scraper.py --steden amsterdam,rotterdam --paginas 5
+  python scraper.py --steden amsterdam --uitvoer leads.csv --json leads.json --verbose
 """
 
 import requests
@@ -22,7 +19,7 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass, asdict
-from typing import List, Optional, Tuple
+from typing import Dict, Generator, Iterator, List, Optional, Tuple
 from urllib.parse import urljoin
 
 # ── Constanten ──────────────────────────────────────────────────────────────
@@ -55,104 +52,91 @@ class Lead:
     bron_url: str = ""
 
 
+CSV_VELDEN = [
+    "praktijk_naam", "dokter_naam", "telefoon", "email",
+    "adres", "postcode", "stad", "website", "bron_url",
+]
+
+
 # ── Hulpfuncties ─────────────────────────────────────────────────────────────
 
-def _schoon_tekst(tekst: str) -> str:
+def _schoon(tekst: str) -> str:
     return " ".join(tekst.split())
 
 
-def _zoek_email(soup: BeautifulSoup, tekst: str) -> str:
-    # 1. mailto-links (meest betrouwbaar)
+def _zoek_email(soup: BeautifulSoup, paginatekst: str) -> str:
     for a in soup.find_all("a", href=True):
         href = a["href"]
         if href.startswith("mailto:"):
-            return href.replace("mailto:", "").split("?")[0].strip()
-    # 2. Regex in de paginatekst
-    match = re.search(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", tekst)
-    return match.group(0) if match else ""
+            return href.replace("mailto:", "").split("?")[0].strip().lower()
+    match = re.search(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", paginatekst)
+    return match.group(0).lower() if match else ""
 
 
-def _zoek_telefoon(soup: BeautifulSoup, tekst: str) -> str:
-    # 1. tel:-links
+def _zoek_telefoon(soup: BeautifulSoup, paginatekst: str) -> str:
     for a in soup.find_all("a", href=True):
         href = a["href"]
         if href.startswith("tel:"):
             nummer = re.sub(r"[^\d+]", "", href.replace("tel:", ""))
             if len(nummer) >= 9:
                 return nummer
-    # 2. Regex: Nederlands formaat  0xx-xxxxxxx / +31xx / 085 / 088
-    match = re.search(
-        r"(?:\+31|0)[\s\-]?(?:\d[\s\-]?){8,10}",
-        tekst,
-    )
+    match = re.search(r"(?:\+31|0)[\s\-]?(?:\d[\s\-]?){8,10}", paginatekst)
     if match:
         return re.sub(r"[\s\-]", "", match.group(0))
     return ""
 
 
-def _zoek_dokters(soup: BeautifulSoup, tekst: str) -> str:
-    """Verzamel doktersnamen uit de pagina."""
-    namen = []
+def _zoek_dokters(soup: BeautifulSoup, paginatekst: str) -> str:
+    namen: List[str] = []
 
-    # Zoek in elementen met relevante klassen/tekst
-    kandidaat_selectors = [
-        "[class*='zorgverlener']",
-        "[class*='behandelaar']",
-        "[class*='professional']",
-        "[class*='medewerker']",
-        "[class*='staff']",
-        "[class*='team']",
-        "[class*='doctor']",
-        "[class*='arts']",
-    ]
-    for selector in kandidaat_selectors:
+    # Selectors voor zorgverlener-blokken
+    for selector in [
+        "[class*='zorgverlener']", "[class*='behandelaar']",
+        "[class*='professional']", "[class*='medewerker']",
+        "[class*='staff']", "[class*='team']",
+        "[class*='doctor']", "[class*='arts']",
+    ]:
         try:
             for el in soup.select(selector):
-                naam = _schoon_tekst(el.get_text())
+                naam = _schoon(el.get_text())
                 if 4 < len(naam) < 60:
                     namen.append(naam)
         except Exception:
             pass
 
-    # Regex: namen voorafgegaan door een titel
-    for match in re.finditer(
-        r"\b(?:drs?\.|dr\.|Drs?\.|Dr\.|Huisarts|huisarts)\s+"
-        r"([A-Z][a-z]+(?:\s+(?:van\s+|de\s+|den\s+|der\s+)?[A-Z][a-z]+){0,4})",
-        tekst,
+    # Regex: namen na een medische titel
+    for m in re.finditer(
+        r"\b(?:Drs?\.|drs?\.|Dr\.|dr\.|Huisarts|huisarts)\s+"
+        r"([A-Z][a-z]+(?:\s+(?:van |de |den |der |'t )?[A-Z][a-z]+){0,4})",
+        paginatekst,
     ):
-        naam = match.group(1).strip()
+        naam = m.group(1).strip()
         if len(naam) > 3:
             namen.append(naam)
 
-    # Deduplicate, behoud volgorde
     seen: set = set()
     uniek = []
     for n in namen:
         if n not in seen:
             seen.add(n)
             uniek.append(n)
+    return "; ".join(uniek[:5])
 
-    return "; ".join(uniek[:5])  # Maximaal 5 doktersnamen
 
-
-def _zoek_adres(soup: BeautifulSoup, tekst: str) -> Tuple[str, str, str]:
-    """Geeft (adres, postcode, stad) terug."""
+def _zoek_adres(soup: BeautifulSoup, paginatekst: str) -> Tuple[str, str, str]:
     postcode = ""
     adres = ""
     stad = ""
 
-    # Postcode-patroon: 1234 AB of 1234AB
-    pc_match = re.search(r"\b(\d{4}\s?[A-Z]{2})\b", tekst)
+    pc_match = re.search(r"\b(\d{4}\s?[A-Z]{2})\b", paginatekst)
     if pc_match:
         postcode = pc_match.group(1).replace(" ", "")
 
-    # Zoek structured address-elementen
     for sel in ["address", "[class*='address']", "[class*='adres']", "[class*='locatie']"]:
         try:
             el = soup.select_one(sel)
             if el:
-                adres_tekst = _schoon_tekst(el.get_text())
-                adres = adres_tekst
+                adres = _schoon(el.get_text())
                 break
         except Exception:
             pass
@@ -173,13 +157,9 @@ def _zoek_website(soup: BeautifulSoup) -> str:
     return ""
 
 
-# ── Paginafuncties ────────────────────────────────────────────────────────────
+# ── HTTP ──────────────────────────────────────────────────────────────────────
 
-def _haal_pagina(
-    url: str,
-    session: requests.Session,
-    vertraging: float = 1.5,
-) -> Optional[BeautifulSoup]:
+def _haal_pagina(url: str, session: requests.Session, vertraging: float = 1.5) -> Optional[BeautifulSoup]:
     time.sleep(vertraging)
     try:
         resp = session.get(url, timeout=20)
@@ -190,14 +170,9 @@ def _haal_pagina(
         return None
 
 
-def _haal_praktijk_urls(
-    stad: str,
-    pagina: int,
-    session: requests.Session,
-) -> Tuple[List[str], bool]:
-    """Geeft lijst van praktijk-URLs + of er een volgende pagina is."""
+def _haal_praktijk_urls(stad: str, pagina: int, session: requests.Session) -> Tuple[List[str], bool]:
     if stad:
-        stad_slug = stad.lower().replace(" ", "-").replace("'", "").replace("ij", "ij")
+        stad_slug = stad.lower().replace(" ", "-").replace("'", "")
         url = f"{LIJST_URL}/{stad_slug}"
     else:
         url = LIJST_URL
@@ -212,24 +187,22 @@ def _haal_praktijk_urls(
     urls: set = set()
     for a in soup.find_all("a", href=True):
         href = a["href"]
-        # Praktijk-detail-URLs hebben minimaal 3 segmenten
         if "/huisartsenpraktijk/" in href and href.count("/") >= 3:
             full = urljoin(BASE_URL, href.split("?")[0])
             if full != url:
                 urls.add(full)
 
-    # Volgende pagina aanwezig?
-    volgende = bool(
+    heeft_volgende = bool(
         soup.find(
             lambda tag: tag.name == "a"
             and any(
-                w in (tag.get("class") or []) or w in (tag.get_text(strip=True).lower())
-                for w in ["next", "volgende", "→", ">"]
+                w in (tag.get("class") or []) or w in tag.get_text(strip=True).lower()
+                for w in ["next", "volgende", "→"]
             )
         )
     )
 
-    return list(urls), volgende
+    return list(urls), heeft_volgende
 
 
 def _scrape_praktijk(url: str, session: requests.Session) -> Lead:
@@ -240,12 +213,10 @@ def _scrape_praktijk(url: str, session: requests.Session) -> Lead:
 
     tekst = soup.get_text(" ", strip=True)
 
-    # Naam
     h1 = soup.find("h1")
     if h1:
-        lead.praktijk_naam = _schoon_tekst(h1.get_text())
+        lead.praktijk_naam = _schoon(h1.get_text())
 
-    # Contactgegevens
     lead.email = _zoek_email(soup, tekst)
     lead.telefoon = _zoek_telefoon(soup, tekst)
     lead.dokter_naam = _zoek_dokters(soup, tekst)
@@ -255,7 +226,73 @@ def _scrape_praktijk(url: str, session: requests.Session) -> Lead:
     return lead
 
 
-# ── Hoofd scraper ─────────────────────────────────────────────────────────────
+# ── Generator API (voor interactieve app) ─────────────────────────────────────
+
+def scrape_generator(
+    steden: List[str],
+    max_paginas: int,
+) -> Generator[Dict, None, None]:
+    """
+    Generator die scraping-events yieldt. Gebruik dit in de Streamlit-app.
+
+    Event types:
+      {"type": "log",      "message": str}
+      {"type": "progress", "value": float (0-1), "message": str}
+      {"type": "lead",     "lead": dict}
+      {"type": "done",     "totaal": int}
+    """
+    session = requests.Session()
+    session.headers.update(HEADERS)
+
+    geziene_urls: set = set()
+    totaal_leads = 0
+    zoek_steden = steden if steden else [""]
+    n_steden = len(zoek_steden)
+
+    for stad_idx, stad in enumerate(zoek_steden):
+        label = stad or "heel Nederland"
+        yield {"type": "log", "message": f"Stad: {label}"}
+
+        stad_urls_totaal = 0
+
+        for pagina in range(1, max_paginas + 1):
+            yield {"type": "log", "message": f"  Pagina {pagina} ophalen..."}
+            urls, heeft_volgende = _haal_praktijk_urls(stad, pagina, session)
+
+            nieuwe_urls = [u for u in urls if u not in geziene_urls]
+            geziene_urls.update(nieuwe_urls)
+
+            if not nieuwe_urls:
+                yield {"type": "log", "message": "  Geen nieuwe praktijken gevonden."}
+                break
+
+            yield {"type": "log", "message": f"  {len(nieuwe_urls)} praktijken gevonden"}
+            stad_urls_totaal += len(nieuwe_urls)
+
+            for i, url in enumerate(nieuwe_urls):
+                # Ruwe voortgangsschatting
+                stap = stad_idx * max_paginas * 20 + (pagina - 1) * 20 + i
+                totaal_stappen = max(1, n_steden * max_paginas * 20)
+                pct = min(stap / totaal_stappen, 0.98)
+
+                yield {
+                    "type": "progress",
+                    "value": pct,
+                    "message": f"[{totaal_leads + 1}] {url.split('/')[-1]}",
+                }
+
+                lead = _scrape_praktijk(url, session)
+                totaal_leads += 1
+                yield {"type": "lead", "lead": asdict(lead)}
+
+            if not heeft_volgende:
+                break
+
+    yield {"type": "progress", "value": 1.0, "message": "Klaar!"}
+    yield {"type": "done", "totaal": totaal_leads}
+
+
+# ── Hoofd scraper (voor CLI) ──────────────────────────────────────────────────
 
 def scrape(
     steden: List[str],
@@ -271,54 +308,39 @@ def scrape(
         force=True,
     )
 
+    alle_leads: List[Lead] = []
     session = requests.Session()
     session.headers.update(HEADERS)
-
-    alle_leads: List[Lead] = []
     geziene_urls: set = set()
 
-    zoek_steden = steden if steden else [""]
-
-    for stad in zoek_steden:
+    for stad in (steden if steden else [""]):
         label = stad or "heel Nederland"
         logging.info(f"\n── Stad: {label} ──")
-
         for pagina in range(1, max_paginas + 1):
-            logging.info(f"  Pagina {pagina} ophalen...")
+            logging.info(f"  Pagina {pagina}...")
             urls, heeft_volgende = _haal_praktijk_urls(stad, pagina, session)
-
             nieuwe_urls = [u for u in urls if u not in geziene_urls]
             geziene_urls.update(nieuwe_urls)
-
             if not nieuwe_urls:
-                logging.info("  Geen nieuwe praktijken gevonden, stop.")
                 break
-
-            logging.info(f"  {len(nieuwe_urls)} praktijken gevonden")
-
+            logging.info(f"  {len(nieuwe_urls)} praktijken")
             for i, url in enumerate(nieuwe_urls, 1):
                 logging.info(f"  [{i}/{len(nieuwe_urls)}] {url}")
-                lead = _scrape_praktijk(url, session)
-                alle_leads.append(lead)
-
+                alle_leads.append(_scrape_praktijk(url, session))
             if not heeft_volgende:
                 break
 
-    # ── CSV opslaan ──
-    velden = ["praktijk_naam", "dokter_naam", "telefoon", "email",
-              "adres", "postcode", "stad", "website", "bron_url"]
-
     with open(uitvoer_csv, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=velden)
+        writer = csv.DictWriter(f, fieldnames=CSV_VELDEN)
         writer.writeheader()
         for lead in alle_leads:
             writer.writerow(asdict(lead))
+    logging.info(f"\nGescrapet: {len(alle_leads)} -> {uitvoer_csv}")
 
-    # ── JSON opslaan (optioneel) ──
     if uitvoer_json:
         with open(uitvoer_json, "w", encoding="utf-8") as f:
             json.dump([asdict(l) for l in alle_leads], f, ensure_ascii=False, indent=2)
-        logging.info(f"JSON opgeslagen: {uitvoer_json}")
+        logging.info(f"JSON: {uitvoer_json}")
 
     return alle_leads
 
@@ -327,92 +349,36 @@ def scrape(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description=(
-            "Huisartsenpraktijken Lead Scraper\n"
-            "Scrapt naam van de dokter, telefoon en email van zorgkaartnederland.nl"
-        ),
+        description="Huisartsenpraktijken Lead Scraper — scrapt doktersnaam, telefoon en email",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 VOORBEELDEN
-  # Scrapt landelijk (5 pagina's)
   python scraper.py
-
-  # Alleen Amsterdam, maximaal 3 pagina's
   python scraper.py --steden amsterdam --paginas 3
+  python scraper.py --steden amsterdam,rotterdam,utrecht --paginas 5 --json leads.json
+  python scraper.py --steden den-haag --uitvoer denhaag.csv --verbose
 
-  # Meerdere steden, ook JSON exporteren
-  python scraper.py --steden amsterdam,rotterdam,utrecht,eindhoven --paginas 5 --json leads.json
-
-  # Aangepaste bestandsnaam + uitgebreide logging
-  python scraper.py --steden den-haag --uitvoer denhaag_leads.csv --verbose
-
-OUTPUT CSV-KOLOMMEN
-  praktijk_naam  - Naam van de praktijk
-  dokter_naam    - Naam van de huisarts(en)
-  telefoon       - Telefoonnummer
-  email          - E-mailadres
-  adres          - Straatadres
-  postcode       - Postcode
-  stad           - Stad
-  website        - Website van de praktijk
-  bron_url       - URL van de bronpagina
+  Of start de interactieve webapp:
+  streamlit run app.py
         """,
     )
-    parser.add_argument(
-        "--steden",
-        type=str,
-        default="",
-        metavar="STAD[,STAD...]",
-        help="Steden om te scrapen, komma-gescheiden (bijv: amsterdam,rotterdam). "
-             "Leeg = heel Nederland.",
-    )
-    parser.add_argument(
-        "--paginas",
-        type=int,
-        default=5,
-        metavar="N",
-        help="Maximaal aantal pagina's per stad (standaard: 5, ±20 praktijken per pagina)",
-    )
-    parser.add_argument(
-        "--uitvoer",
-        type=str,
-        default="huisartsen_leads.csv",
-        metavar="BESTAND.csv",
-        help="Naam van het output CSV-bestand (standaard: huisartsen_leads.csv)",
-    )
-    parser.add_argument(
-        "--json",
-        type=str,
-        default=None,
-        metavar="BESTAND.json",
-        help="Optioneel: exporteer ook naar JSON",
-    )
-    parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="Uitgebreide logging",
-    )
-
+    parser.add_argument("--steden", type=str, default="", metavar="STAD[,STAD...]",
+                        help="Steden (komma-gescheiden). Leeg = heel Nederland.")
+    parser.add_argument("--paginas", type=int, default=5, metavar="N",
+                        help="Max pagina's per stad (standaard: 5)")
+    parser.add_argument("--uitvoer", type=str, default="huisartsen_leads.csv", metavar="BESTAND.csv")
+    parser.add_argument("--json", type=str, default=None, metavar="BESTAND.json")
+    parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
 
     steden = [s.strip() for s in args.steden.split(",") if s.strip()] if args.steden else []
+    leads = scrape(steden=steden, max_paginas=args.paginas,
+                   uitvoer_csv=args.uitvoer, uitvoer_json=args.json, verbose=args.verbose)
 
-    leads = scrape(
-        steden=steden,
-        max_paginas=args.paginas,
-        uitvoer_csv=args.uitvoer,
-        uitvoer_json=args.json,
-        verbose=args.verbose,
-    )
-
-    # ── Samenvatting ──
     met_email = sum(1 for l in leads if l.email)
     met_tel = sum(1 for l in leads if l.telefoon)
     met_dokter = sum(1 for l in leads if l.dokter_naam)
-
-    print("\n" + "=" * 40)
-    print("RESULTATEN")
-    print("=" * 40)
+    print(f"\n{'='*40}\nRESULTATEN\n{'='*40}")
     print(f"  Totaal praktijken  : {len(leads)}")
     print(f"  Met e-mail         : {met_email}")
     print(f"  Met telefoonnummer : {met_tel}")
