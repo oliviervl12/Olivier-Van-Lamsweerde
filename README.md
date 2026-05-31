@@ -62,6 +62,20 @@ npm run dev
 
 ---
 
+## 👀 Preview / demo modus (zonder backend)
+
+Wil je de app bekijken zonder Supabase op te zetten? Start in demo modus —
+dan worden alle schermen gevuld met realistische mockdata (12 bewoners, 2
+maanden turf acties) en is geen login of database nodig:
+
+```bash
+DEMO_MODE=1 npm run dev
+# -> http://localhost:3000/dashboard
+```
+
+> Demo modus is puur voor previews: turven/opslaan werkt niet. Laat
+> `DEMO_MODE` weg (of zet op iets anders) voor de echte app met Supabase.
+
 ## 🗄️ Supabase setup
 
 1. Maak een nieuw project op [supabase.com](https://supabase.com).

@@ -2,6 +2,17 @@
 // Aggregatie gebeurt in JS (volume van een studentenhuis is klein).
 import { createClient } from "@/lib/supabase/server";
 import { previousPeriod } from "@/lib/format";
+import {
+  isDemo,
+  demoProducts,
+  demoResidents,
+  demoMonthEntries,
+  demoRecentEntries,
+  demoLifetimeTotals,
+  demoImports,
+  demoCorrections,
+  demoUsers,
+} from "@/lib/demo";
 import type {
   Product,
   Resident,
@@ -9,6 +20,7 @@ import type {
 } from "@/lib/types";
 
 export async function getProducts(includeInactive = false): Promise<Product[]> {
+  if (isDemo()) return demoProducts.filter((p) => includeInactive || p.active);
   const supabase = await createClient();
   let q = supabase.from("products").select("*").order("sort_order");
   if (!includeInactive) q = q.eq("active", true);
@@ -19,6 +31,8 @@ export async function getProducts(includeInactive = false): Promise<Product[]> {
 export async function getResidents(
   includeInactive = false,
 ): Promise<Resident[]> {
+  if (isDemo())
+    return demoResidents.filter((r) => includeInactive || r.active);
   const supabase = await createClient();
   let q = supabase.from("residents").select("*").order("name");
   if (!includeInactive) q = q.eq("active", true);
@@ -29,6 +43,7 @@ export async function getResidents(
 export async function getMonthEntries(
   period: string,
 ): Promise<TurfEntryDetailed[]> {
+  if (isDemo()) return demoMonthEntries(period);
   const supabase = await createClient();
   const { data } = await supabase
     .from("turf_entries")
@@ -45,6 +60,7 @@ export async function getMonthEntries(
 export async function getRecentEntries(
   limit = 10,
 ): Promise<TurfEntryDetailed[]> {
+  if (isDemo()) return demoRecentEntries(limit);
   const supabase = await createClient();
   const { data } = await supabase
     .from("turf_entries")
@@ -62,6 +78,7 @@ export async function getRecentEntries(
 export async function getResidentLifetimeTotals(): Promise<
   Record<string, { actions: number; quantity: number }>
 > {
+  if (isDemo()) return demoLifetimeTotals();
   const supabase = await createClient();
   const { data } = await supabase
     .from("turf_entries")
@@ -78,6 +95,7 @@ export async function getResidentLifetimeTotals(): Promise<
 
 // Alle app-gebruikers (alleen leesbaar voor admin via RLS).
 export async function getAppUsers() {
+  if (isDemo()) return demoUsers;
   const supabase = await createClient();
   const { data } = await supabase
     .from("users")
@@ -88,6 +106,7 @@ export async function getAppUsers() {
 
 // Import-historie.
 export async function getImports() {
+  if (isDemo()) return demoImports;
   const supabase = await createClient();
   const { data } = await supabase
     .from("imports")
@@ -99,6 +118,7 @@ export async function getImports() {
 
 // Audit log (correcties) met naam van de uitvoerder.
 export async function getCorrections() {
+  if (isDemo()) return demoCorrections;
   const supabase = await createClient();
   const { data } = await supabase
     .from("corrections")

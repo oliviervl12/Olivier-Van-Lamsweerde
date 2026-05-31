@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { isDemo, demoUser } from "@/lib/demo";
 import type { AppUser } from "@/lib/types";
 
 // Haalt de ingelogde gebruiker + zijn profiel (rol) op.
 // Retourneert null als er geen sessie is.
 export async function getCurrentUser(): Promise<AppUser | null> {
+  if (isDemo()) return demoUser;
   const supabase = await createClient();
   const {
     data: { user },
