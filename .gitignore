@@ -1,7 +1,9 @@
 # Environment and credentials
 .env
 *.env
+.env*.local
 !config.template.env
+!.env.example
 
 # API keys and secrets
 secrets/
@@ -44,7 +46,18 @@ desktop.ini
 
 # Node modules (if adding Node.js scripts)
 node_modules/
-package-lock.json
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+.vercel
+*.tsbuildinfo
+
+# Allow committed example import files (override *.csv / *.xlsx above)
+!examples/
+!examples/*.csv
+!examples/*.xlsx
 
 # Temporary files
 tmp/

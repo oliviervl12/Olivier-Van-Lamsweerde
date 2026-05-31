@@ -1,380 +1,224 @@
-# Huisartsen Scraper - N8N Workflow
+# 🏠 Huisturf
 
-An automated N8N workflow for scraping information about Dutch general practitioner practices (huisartsenpraktijken) and organizing the data in Google Sheets.
+Een simpele, snelle en mobielvriendelijke **turf app voor een studentenhuis**.
+Turf bier, koffie en eieren, bekijk maandoverzichten, strijd om het klassement
+en importeer oude papieren turflijsten via Excel of CSV.
 
-## Features
+Gebouwd met **Next.js 15 (App Router) · TypeScript · Tailwind CSS · Supabase
+(Postgres + Auth)**.
 
-This workflow automatically extracts and organizes the following information:
-
-- **Practice Information:**
-  - Practice name
-  - Full address (street, number, postal code, city)
-  - Main phone number
-  - Email address
-  - Website
-  - Number of doctors
-
-- **Doctor Details:**
-  - Individual doctor names
-  - Doctor-specific email addresses (when available)
-  - Direct phone lines (when available)
-  - Specializations
-
-- **Output Format:**
-  - Organized Google Sheets with multiple tabs
-  - Timestamped data for tracking
-  - Clean, structured format
-
-## Data Sources
-
-The workflow uses multiple data sources for comprehensive coverage:
-
-1. **Google Places API** - Primary source for practice locations and basic info
-2. **Practice Websites** - Detailed doctor information and contact details
-3. **Zorgkaart Nederland** - Alternative/supplementary data source (optional)
-
-## Prerequisites
-
-Before using this workflow, you need:
-
-### 1. N8N Installation
-- N8N instance (self-hosted or cloud)
-- Version 1.0+ recommended
-- Install from: https://n8n.io/
-
-### 2. Google Maps API
-- Google Cloud account
-- Places API enabled
-- API key with the following APIs:
-  - Places API
-  - Geocoding API (optional, for address validation)
-- Get your API key: https://console.cloud.google.com/apis
-
-### 3. Google Sheets API
-- Google account
-- OAuth2 credentials configured in N8N
-- Spreadsheet prepared with required tabs (see below)
-
-### 4. AI/LLM Service
-Choose one:
-- **OpenAI API** (recommended)
-  - API key from: https://platform.openai.com/
-- **Local LLM** (e.g., Ollama, LM Studio)
-- **Other providers** (Anthropic, Cohere, etc.)
-
-## Setup Instructions
-
-### Step 1: Import the Workflow
-
-1. Open your N8N instance
-2. Click on "Workflows" in the sidebar
-3. Click "Import from File" or "Import from URL"
-4. Select `huisartsen-scraper-workflow.json`
-5. Click "Import"
-
-### Step 2: Configure Credentials
-
-#### Google Maps API
-1. In N8N, go to **Credentials** → **New**
-2. Select "Google Maps API"
-3. Enter your API key
-4. Save the credential
-
-#### Google Sheets OAuth2
-1. Go to **Credentials** → **New**
-2. Select "Google Sheets OAuth2 API"
-3. Follow the OAuth flow to authorize N8N
-4. Grant necessary permissions
-5. Save the credential
-
-#### OpenAI API (or alternative LLM)
-1. Go to **Credentials** → **New**
-2. Select "OpenAI API"
-3. Enter your API key
-4. Save the credential
-
-### Step 3: Prepare Google Sheets
-
-Create a new Google Sheet with the following tabs:
-
-#### Tab 1: "Practice Info"
-Columns:
-- practice_name
-- address
-- postal_code
-- city
-- phone
-- email
-- website
-- doctors_count
-- scraped_date
-
-#### Tab 2: "Doctor Details"
-Columns:
-- practice_name
-- practice_city
-- doctor_name
-- doctor_email
-- doctor_phone
-- specialization
-- scraped_date
-
-#### Tab 3: "Contact Information" (Optional)
-For aggregated contact data:
-- entity_name (practice or doctor)
-- entity_type (practice/doctor)
-- email
-- phone
-- city
-- scraped_date
-
-**Important:** Make sure the column headers exactly match the names above.
-
-### Step 4: Configure the Workflow
-
-1. Open the imported workflow
-2. Update the following nodes:
-
-#### "Search Google Places" Node
-- Add your Google Maps API credential
-- Adjust search query if needed
-
-#### "Get Place Details" Node
-- Add your Google Maps API credential
-
-#### "AI Extract Information" Node
-- Select your LLM provider (OpenAI, local, etc.)
-- Add the appropriate credential
-- Adjust the prompt if needed for better extraction
-
-#### "Write to Practice Info Tab" Node
-- Select your Google Sheets credential
-- Enter your spreadsheet ID or select from list
-- Verify the sheet name matches: "Practice Info"
-
-#### "Write to Doctor Details Tab" Node
-- Select your Google Sheets credential
-- Enter your spreadsheet ID or select from list
-- Verify the sheet name matches: "Doctor Details"
-
-### Step 5: Test the Workflow
-
-1. Click "Execute Workflow" to run a test
-2. Monitor the execution in the workflow view
-3. Check for any errors in individual nodes
-4. Verify data appears correctly in your Google Sheet
-
-## Usage
-
-### Manual Execution
-
-1. Open the workflow in N8N
-2. Click the "Execute Workflow" button
-3. Wait for completion (may take several minutes depending on results)
-4. Check your Google Sheet for the scraped data
-
-### Scheduled Execution (Optional)
-
-To run the workflow automatically:
-
-1. Enable the "Schedule (Optional)" trigger node
-2. Configure the schedule:
-   - Current: Every 6 hours
-   - Adjust as needed (daily, weekly, etc.)
-3. Save and activate the workflow
-
-### Customizing the Search
-
-Modify the "Set Initial Parameters" node to change:
-
-- **Search query:** Default is "huisartsenpraktijk"
-  - Try: "huisarts amsterdam" for specific city
-  - Try: "huisartsenpraktijk utrecht" for regional focus
-- **Country:** Default is "Netherlands"
-- **Additional filters:** Add postal codes, regions, etc.
-
-## Advanced Configuration
-
-### Rate Limiting
-
-The workflow includes a 2-second delay between requests. Adjust in the "Rate Limit Delay" node:
-
-```javascript
-const delayMs = 2000; // Change to your preferred delay (milliseconds)
-```
-
-### AI Prompt Customization
-
-Edit the "AI Extract Information" node prompt to:
-- Extract additional fields
-- Focus on specific information
-- Improve extraction accuracy
-- Handle different website structures
-
-### Alternative Data Sources
-
-The workflow includes a disabled "Zorgkaart Search" node:
-1. Enable the node
-2. Configure the scraping logic
-3. Merge results with Google Places data
-
-### Error Handling
-
-Add error handling nodes:
-- Email notifications on failures
-- Retry logic for failed requests
-- Data validation before writing to sheets
-
-## Data Privacy & Compliance
-
-⚠️ **Important Legal Considerations:**
-
-- Respect website terms of service
-- Follow GDPR regulations for Dutch data
-- Only collect publicly available information
-- Honor robots.txt directives
-- Implement appropriate rate limiting
-- Store data securely
-- Consider data retention policies
-
-**This tool is for legitimate business/research purposes only.**
-
-## Troubleshooting
-
-### Common Issues
-
-#### "No results found"
-- Check your Google Places API quota
-- Verify the search query is appropriate
-- Try broader search terms
-- Check API key permissions
-
-#### "Failed to scrape website"
-- Website may block automated access
-- Add user-agent headers
-- Implement respectful delays
-- Some sites may require JavaScript rendering
-
-#### "AI extraction errors"
-- Website structure may be non-standard
-- Adjust the AI prompt for better guidance
-- Increase LLM temperature for flexibility
-- Try a different model
-
-#### "Google Sheets write failed"
-- Verify spreadsheet ID is correct
-- Check tab names match exactly
-- Ensure OAuth permissions are granted
-- Check column names match the workflow
-
-### Debug Mode
-
-Enable debug mode in N8N:
-1. Click the workflow settings
-2. Enable "Save manual executions"
-3. Enable "Save execution progress"
-4. Run the workflow
-5. Inspect individual node outputs
-
-## Workflow Structure
-
-```
-Start/Schedule Trigger
-    ↓
-Set Initial Parameters
-    ↓
-Search Google Places (API)
-    ↓
-Extract Basic Info
-    ↓
-Get Place Details (API)
-    ↓
-Rate Limit Delay
-    ↓
-Scrape Practice Website
-    ↓
-AI Extract Information (LLM)
-    ↓
-Filter Valid Practices
-    ↓
-Structure Data
-    ↓
-├── Write to Practice Info Tab
-└── Write to Doctor Details Tab
-```
-
-## Performance Considerations
-
-- **API Quotas:** Google Places API has daily limits
-- **Rate Limits:** Respect server rate limits (default: 2s delay)
-- **Execution Time:** Large searches may take 30+ minutes
-- **Cost:** OpenAI API calls have per-token costs
-
-## Optimization Tips
-
-1. **Batch Processing:** Process practices in chunks
-2. **Caching:** Store results to avoid re-scraping
-3. **Incremental Updates:** Only scrape new/changed practices
-4. **Parallel Execution:** Process multiple practices simultaneously (with caution)
-5. **Data Deduplication:** Check for existing entries before writing
-
-## Extending the Workflow
-
-### Add More Data Fields
-1. Update the AI extraction prompt
-2. Modify the "Structure Data" node
-3. Add columns to Google Sheets
-4. Update the write nodes
-
-### Multiple Cities/Regions
-1. Add a loop node before "Set Initial Parameters"
-2. Provide a list of cities or postal codes
-3. Process each location sequentially
-
-### Export to Other Formats
-1. Add nodes for CSV export
-2. Connect to databases (PostgreSQL, MySQL)
-3. Send to CRM systems
-4. Post to APIs
-
-## Support & Contributing
-
-### Issues
-If you encounter problems:
-1. Check the troubleshooting section
-2. Review N8N logs
-3. Verify all credentials are valid
-4. Test each node individually
-
-### Improvements
-Suggestions for improvements:
-- Better error handling
-- Additional data sources
-- More sophisticated AI extraction
-- Alternative export formats
-
-## License
-
-This workflow is provided as-is for educational and legitimate business purposes. Please ensure you comply with all applicable laws and terms of service when using this tool.
-
-## Version History
-
-- **v1.0** (2025-01-05)
-  - Initial release
-  - Google Places integration
-  - AI-powered extraction
-  - Multi-tab Google Sheets export
-  - Rate limiting and error handling
-
-## Acknowledgments
-
-- N8N community for workflow patterns
-- Google Places API for location data
-- OpenAI for intelligent data extraction
-- Dutch healthcare data sources
+> ℹ️ Deze repository-branch bevat de Huisturf app. (De oude
+> `huisartsen-scraper-workflow.json` / `config.template.env` bestanden horen bij
+> een ander, los project en worden door deze app niet gebruikt.)
 
 ---
 
-**Happy Scraping!** 🏥🇳🇱
+## ✨ Functionaliteiten
 
-For questions or support, please refer to the N8N documentation: https://docs.n8n.io/
+| Pagina | Wat kun je er doen |
+| --- | --- |
+| **Login** | Inloggen met e-mail + wachtwoord (Supabase Auth) |
+| **Dashboard** | Maandtotalen per product, persoonlijke totals, snel turven, recente acties, mini-klassement |
+| **Snel turven** | Snelle modus (+ bier / + koffie / + ei) én volledig formulier; eigen actie ongedaan maken binnen 5 min |
+| **Maandoverzicht** | Totaal per persoon & product, kosten per persoon, filter op maand, export naar CSV/Excel |
+| **Klassement** | Rankings per product, overall klassement, badges (Bierkoning, Koffiebaas, Eiermachine, Alleskunner, Comeback, Huislegende) |
+| **Bewoners** *(admin)* | Toevoegen, naam aanpassen, op inactief zetten, verwijderen (alleen zonder historie) |
+| **Producten** *(admin)* | Prijzen beheren, nieuwe producten toevoegen (fris, wijn, snacks, wc-papier…) |
+| **Import** *(admin)* | Excel/CSV uploaden, preview, kolommen koppelen, namen matchen, dubbele import voorkomen |
+| **Correcties** *(admin)* | Turf acties aanpassen/verwijderen, volledige audit log |
+| **Instellingen** | Eigen profiel; admin beheert rollen en koppelt logins aan bewoners |
+
+### Rollen
+
+- **Bewoner** — turven, eigen data + klassement bekijken.
+- **Admin** — alles van bewoner + bewoners/producten beheren, importeren,
+  correcties, prijzen, exporteren, rollen beheren.
+
+---
+
+## 🚀 Lokale installatie
+
+### Vereisten
+- Node.js 18.18+ (getest met Node 22)
+- Een gratis [Supabase](https://supabase.com) project
+
+### Stappen
+
+```bash
+# 1. Dependencies installeren
+npm install
+
+# 2. Environment variabelen instellen
+cp .env.example .env.local
+# vul NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY en
+# SUPABASE_SERVICE_ROLE_KEY in (zie .env.example)
+
+# 3. Database opzetten (zie hieronder)
+
+# 4. Dev server starten
+npm run dev
+# -> http://localhost:3000
+```
+
+---
+
+## 👀 Preview / demo modus (zonder backend)
+
+Wil je de app bekijken zonder Supabase op te zetten? Start in demo modus —
+dan worden alle schermen gevuld met realistische mockdata (12 bewoners, 2
+maanden turf acties) en is geen login of database nodig:
+
+```bash
+DEMO_MODE=1 npm run dev
+# -> http://localhost:3000/dashboard
+```
+
+> Demo modus is puur voor previews: turven/opslaan werkt niet. Laat
+> `DEMO_MODE` weg (of zet op iets anders) voor de echte app met Supabase.
+
+## 🗄️ Supabase setup
+
+1. Maak een nieuw project op [supabase.com](https://supabase.com).
+2. Ga naar **Project Settings → API** en kopieer:
+   - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
+   - `anon public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `service_role` secret → `SUPABASE_SERVICE_ROLE_KEY` *(alleen server-side!)*
+3. Open de **SQL Editor** en draai de scripts in deze volgorde:
+   1. `supabase/migrations/0001_schema.sql` — tabellen, enums, triggers
+   2. `supabase/migrations/0002_rls.sql` — Row Level Security policies
+   3. `supabase/seed.sql` — testdata (12 bewoners + ~2 maanden turf acties)
+4. Maak een gebruiker aan: **Authentication → Users → Add user** (of laat een
+   huisgenoot registreren). Dankzij een trigger krijgt elke nieuwe auth-user
+   automatisch een profiel met rol `bewoner`.
+5. Promoveer jezelf tot admin: open `supabase/make_admin.sql`, vul je e-mail in
+   en draai het.
+
+> **CLI-alternatief:** met de [Supabase CLI](https://supabase.com/docs/guides/cli)
+> kun je `supabase db push` gebruiken; de migraties staan in `supabase/migrations`.
+
+---
+
+## 📥 Hoe werkt de Excel/CSV import?
+
+De importpagina (admin) loodst je in 4 stappen door het proces:
+
+1. **Upload** – kies een `.xlsx`, `.xls` of `.csv` bestand. De eerste rij moet
+   kolomkoppen bevatten. Van de bestandsinhoud wordt een SHA-256 hash berekend.
+2. **Kolommen koppelen** – de app herkent automatisch kolommen als
+   *naam/persoon/bewoner*, *product/item*, *aantal*, *maand* en *datum*. Klopt
+   iets niet? Koppel de kolom handmatig via het dropdown-menu.
+3. **Onbekende namen** – namen die nog niet bestaan kun je **als nieuwe bewoner
+   aanmaken** of **koppelen aan een bestaande bewoner**.
+4. **Preview & importeren** – je ziet per regel het resultaat (geldig of fout
+   met uitleg). Klik op importeren; je krijgt te zien hoeveel regels zijn
+   toegevoegd en welke fout gingen.
+
+**Dubbele import** wordt voorkomen: een bestand met exact dezelfde inhoud kan
+niet twee keer gecommit worden (unieke hash in `imports`). Alle imports staan in
+de import-historie.
+
+### Ondersteunde formaten (voorbeelden in `examples/`)
+
+```
+Voorbeeld 1 (breed):   Naam | Bier | Koffie | Eieren | Maand
+Voorbeeld 2 (datum):   Datum | Persoon | Product | Aantal
+Voorbeeld 3 (maand):   Persoon | Item | Aantal | Maand
+```
+
+Bij het brede formaat wordt elke productkolom met een aantal > 0 omgezet naar
+een aparte turf-regel. Productnamen worden slim herkend (bv. `pils` → bier,
+`coffee` → koffie, `eitjes` → ei).
+
+---
+
+## 🧱 Database schema
+
+| Tabel | Doel |
+| --- | --- |
+| `users` | App-gebruikers, gekoppeld aan `auth.users`, met rol + optionele resident |
+| `residents` | Huisgenoten; `active` flag voor soft-delete (historie blijft kloppen) |
+| `products` | bier / koffie / eieren (uitbreidbaar), prijs in centen |
+| `turf_entries` | De turf acties (resident, product, aantal, tijdstip, `period_month`) |
+| `imports` | Import-historie + bestandshash voor dedupe |
+| `import_rows` | Ruwe + genormaliseerde rijen per import, met status/fout |
+| `corrections` | Audit log van wijzigingen, verwijderingen en undo's |
+| `monthly_snapshots` | (Optioneel) bevroren maandstanden |
+
+Volledige definities + RLS staan in `supabase/migrations/`.
+
+---
+
+## 🧩 Later uitbreiden
+
+- **Nieuw product** (fris, wijn, snacks, wc-papier): ga naar **Producten →
+  Nieuw product**. Het model is volledig data-gedreven; overal waar producten
+  getoond worden verschijnt het nieuwe product automatisch.
+- **Meer rollen/rechten**: breid de `user_role` enum uit en pas de RLS-policies
+  in `0002_rls.sql` aan.
+- **Maandsnapshots**: vul `monthly_snapshots` aan het eind van een maand om
+  historische standen te bevriezen (de tabel + policies staan klaar).
+- **Push/notificaties, betalingen, statistieken**: bouw verder op de bestaande
+  data-laag in `src/lib/data.ts`.
+
+---
+
+## 📐 Gemaakte aannames
+
+1. **Inloggen** gaat via e-mail + wachtwoord (Supabase Auth). Nieuwe accounts
+   worden door een admin aangemaakt (geen open registratie in de UI).
+2. **`residents` ≠ `users`**: een bewoner die geturfd wordt hoeft geen
+   login-account te hebben (handig voor geïmporteerde personen). Een login kan
+   optioneel aan een bewoner gekoppeld worden.
+3. **Iedere ingelogde gebruiker mag voor iedereen turven** — past bij een
+   gezamenlijke turflijst in huis. Het klassement is binnen het huis openbaar.
+4. **Undo-venster** voor bewoners is 5 minuten (afgedwongen via RLS).
+   Admins kunnen altijd corrigeren.
+5. **Tijdzone** is `Europe/Amsterdam`; de maand van een turf-actie wordt
+   hierop berekend (`period_month`).
+6. **Prijzen** staan in centen. Standaard: bier €0,90 · koffie €0,30 ·
+   ei €0,35 (aanpasbaar). Kosten verschijnen pas als er een prijs > 0 is.
+7. **Import zonder datum** maar mét maand → de actie krijgt als datum de 15e van
+   die maand (midden van de maand), zodat de maandindeling klopt.
+8. **Verwijderen vs. inactief**: bewoners/producten met turf-historie kunnen
+   niet verwijderd worden, alleen op inactief gezet, zodat oude rapportages
+   intact blijven.
+
+---
+
+## 📜 Scripts
+
+```bash
+npm run dev        # development server
+npm run build      # productie build
+npm run start      # productie server
+npm run lint       # ESLint
+npm run typecheck  # TypeScript check
+```
+
+---
+
+## 📁 Projectstructuur
+
+```
+src/
+├─ app/
+│  ├─ (app)/              # ingelogde pagina's (dashboard, turven, ...)
+│  ├─ actions/            # server actions (turf, import, residents, ...)
+│  ├─ login/              # loginpagina
+│  └─ layout.tsx
+├─ components/            # UI componenten (+ admin/)
+├─ lib/
+│  ├─ supabase/           # client/server/admin/middleware
+│  ├─ data.ts             # aggregaties (dashboard/klassement/maand)
+│  ├─ import-utils.ts     # kolomherkenning & normalisatie
+│  ├─ badges.ts           # klassement-badges
+│  ├─ format.ts           # datum/geld/maand helpers
+│  └─ auth.ts             # sessie + rol helpers
+└─ middleware.ts          # auth guard + sessie refresh
+supabase/
+├─ migrations/0001_schema.sql
+├─ migrations/0002_rls.sql
+├─ seed.sql
+└─ make_admin.sql
+examples/                 # voorbeeld import-bestanden
+```
